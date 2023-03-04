@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Screen Recorder",
+  "description": "Chrome Screen Recorder",
+  "version": "0.1.0",
+  "content_scripts": [{ "matches": ["http://localhost:3000/draft"], "js": ["content.js"] }],
+  "action": {
+    "default_icon": "images/video-recorder-icon.jpg"
+  },
+  "permissions": ["activeTab", "scripting", "storage"],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
