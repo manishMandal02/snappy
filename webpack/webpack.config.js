@@ -5,6 +5,11 @@ module.exports = {
   entry: {
     background: path.resolve(__dirname, '..', 'src', 'background.ts'),
     content: path.resolve(__dirname, '..', 'src', 'content.ts'),
+    captureMedia: path.resolve(__dirname, '..', 'src', 'captureMedia.ts'),
+  },
+
+  optimization: {
+    minimize: false,
   },
 
   output: {

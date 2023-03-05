@@ -1,137 +1,146 @@
-let box: HTMLDivElement;
-let overlay: HTMLDivElement;
-let cameraStreamVideoEl: HTMLVideoElement;
-let screenSteamVIdeoEl: HTMLVideoElement;
-let screenStream: MediaStream;
-let cameraStream: MediaStream;
-let streamMaxWidth: number;
-let streamMaxHeight: number;
-let mergedStream: MediaStream;
-let videoTracks: MediaStreamTrack[];
+const openRecorder = () => {
+  let box: HTMLDivElement;
+  let overlay: HTMLDivElement;
+  let screenShareVideoEl: HTMLVideoElement;
+  let screenStream: MediaStream;
+  let cameraStream: MediaStream | null;
+  let streamMaxWidth: number;
+  const canvasEl = document.createElement('canvas');
+  const canvasCtx = canvasEl.getContext('2d')!;
 
-// canvas element to merge the videos
-const canvasEl = document.createElement('canvas');
-const canvasCtx = canvasEl.getContext('2d')!;
+  let streamMaxHeight: number;
+  let mergedStream: MediaStream;
+  let videoTracks: MediaStreamTrack[];
+  let videoChunks: Blob[] = [];
+  let mediaRecorder: MediaRecorder;
+  let DEFAULT_FPS = 30;
 
-const blobToDataURL = (blob: Blob): Promise<string> => {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (_e) => resolve(reader.result as string);
-    reader.onerror = (_e) => reject(reader.error);
-    reader.onabort = (_e) => reject(new Error('Read aborted'));
-    reader.readAsDataURL(blob);
-  });
-};
+  let cameraStreamVideoEl: HTMLVideoElement;
 
-// copied code
-/**
- * Internal Polyfill to simulate
- * window.requestAnimationFrame
- * since the browser will kill canvas
- * drawing when tab is inactive
- */
-const requestVideoFrame = (callback: (date: number) => void) => {
-  return window.setTimeout(function () {
-    callback(Date.now());
-  }, 1000 / 60); // 60 fps - just like requestAnimationFrame
-};
+  // On click extension icon
 
-// copied code
-/**
- * Internal polyfill to simulate
- * window.cancelAnimationFrame
- */
-const cancelVideoFrame = function (id: string) {
-  clearTimeout(id);
-};
-
-const startScreenCapture = async (displayMediaOptions: DisplayMediaStreamOptions) => {
-  let screenStream = null;
-
-  try {
-    screenStream = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions);
-  } catch (err) {
-    console.error(`Error: ${err}`);
-  }
-  return screenStream;
-};
-
-const startCameraCapture = async (constraints?: MediaStreamConstraints) => {
-  let cameraStream = null;
-
-  try {
-    cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
-  } catch (err) {
-    console.error(`Error: ${err}`);
-  }
-  return cameraStream;
-};
-
-// capture frames from each video stream and draw them onto the canvas
-function drawFrame() {
-  canvasCtx.save();
-  canvasEl.setAttribute('width', `${streamMaxWidth}px`);
-  canvasEl.setAttribute('height', `${streamMaxHeight}px`);
-  canvasCtx.drawImage(screenSteamVIdeoEl, 0, 0, streamMaxWidth, streamMaxHeight);
-  canvasCtx.drawImage(cameraStreamVideoEl, 10, 10, 8, 8);
-
-  // convert the canvas to a blob and create a new video track
-  canvasEl.toBlob((blob) => {
-    const newTrack = new MediaStreamTrack();
-
-    newTrack.enabled = true;
-
-    // add the new track to the merged stream
-    videoTracks.push(newTrack);
-    mergedStream.addTrack(newTrack);
-
-    // call drawFrame again to capture the next frame
-    requestAnimationFrame(drawFrame);
-  }, 'video/webm');
-}
-
-const mergeStreams = () => {
-  // set the canvas size to the dimensions of the the screen
-  streamMaxHeight = screenStream.getVideoTracks()[0].getSettings().height!;
-  streamMaxWidth = screenStream.getVideoTracks()[0].getSettings().width!;
-  // canvas.width = streamMaxWidth;
-  // canvas.height = streamMaxHeight;
-};
-
-const createCameraPopup = ({ videoSrc }: { videoSrc: MediaStream }) => {
-  // parent container for popup
-  // const cameraPopup = document.createElement('div');
-  // cameraPopup.style.backgroundColor = '#7477FF';
-  // cameraPopup.style.width = '15rem';
-  // cameraPopup.style.height = '15rem';
-  // cameraPopup.style.borderRadius = '50%';
-  // cameraPopup.style.position = 'fixed';
-  // cameraPopup.style.left = '10%';
-  // cameraPopup.style.bottom = '10%';
-  // cameraPopup.style.cursor = 'move';
-  // cameraPopup.style.userSelect = 'none';
-  // cameraPopup.draggable = true;
-
-  // document.body.appendChild(cameraPopup);
-
-  // video container to show live video stream from camera
-  cameraStreamVideoEl = document.createElement('video');
-  cameraStreamVideoEl.style.width = '15rem';
-  cameraStreamVideoEl.style.height = '15rem';
-  cameraStreamVideoEl.style.position = 'fixed';
-  cameraStreamVideoEl.style.borderRadius = '50%';
-  cameraStreamVideoEl.style.objectFit = 'cover';
-  cameraStreamVideoEl.srcObject = videoSrc;
-  cameraStreamVideoEl.muted = true;
-  cameraStreamVideoEl.playsInline = true;
-  cameraStreamVideoEl.onloadedmetadata = () => {
-    cameraStreamVideoEl.play();
+  const blobToDataURL = (blob: Blob): Promise<string> => {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (_e) => resolve(reader.result as string);
+      reader.onerror = (_e) => reject(reader.error);
+      reader.onabort = (_e) => reject(new Error('Read aborted'));
+      reader.readAsDataURL(blob);
+    });
   };
 
-  document.body.appendChild(cameraStreamVideoEl);
-};
+  const requestVideoFrame = function (callback: (date?: any) => void) {
+    return window.setTimeout(function () {
+      callback(Date.now());
+    }, 1000 / 60); // 60 fps - just like requestAnimationFrame
+  };
 
-const openRecorder = () => {
+  // const videoStreamMergerScript = document.createElement('script');
+  // videoStreamMergerScript.src = 'videoStreamMerger.js';
+  // videoStreamMergerScript.type = 'text/javascript';
+  // document.head.appendChild(videoStreamMergerScript);
+
+  /**
+   * Internal polyfill to simulate
+   * window.cancelAnimationFrame
+   */
+  const cancelVideoFrame = function (id: string) {
+    clearTimeout(id);
+  };
+
+  const startScreenCapture = async (displayMediaOptions: DisplayMediaStreamOptions) => {
+    try {
+      screenStream = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions);
+    } catch (err) {
+      console.error(`Error: ${err}`);
+    }
+    return screenStream;
+  };
+
+  const startCameraCapture = async (constraints?: MediaStreamConstraints) => {
+    try {
+      cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (err) {
+      console.error(`Error: ${err}`);
+    }
+    return cameraStream;
+  };
+
+  // combining screen and camera video stream to one with canvas
+
+  const drawingLoop = () => {
+    canvasCtx.drawImage(screenShareVideoEl, 0, 0, streamMaxWidth, streamMaxHeight);
+    canvasCtx.drawImage(
+      cameraStreamVideoEl,
+      0,
+      Math.floor(streamMaxWidth - streamMaxHeight / 4),
+      Math.floor(streamMaxWidth / 4),
+      Math.floor(streamMaxHeight / 4)
+    ); // this is just a rough calculation to offset the webcam stream to bottom left
+    //
+    // let imageData = canvasCtx.getImageData(0, 0, streamMaxWidth || 1280, streamMaxHeight || 720); // this makes it work
+    // canvasCtx.putImageData(imageData, 0, 0); // properly on safari/webkit browsers too
+    // canvasCtx.restore();
+    requestVideoFrame(combineStreamToCanvas);
+  };
+
+  const combineStreamToCanvas = () => {
+    if (!screenShareVideoEl || !cameraStreamVideoEl) {
+      throw new Error('Error: Camera or screen feed not available');
+    }
+
+    streamMaxHeight = screenShareVideoEl.videoHeight;
+    streamMaxWidth = screenShareVideoEl.videoWidth;
+
+    canvasEl.setAttribute('width', `${streamMaxWidth}px`);
+    canvasEl.setAttribute('height', `${streamMaxHeight}px`);
+    // canvasCtx.clearRect(0, 0, streamMaxWidth, streamMaxHeight);
+
+    drawingLoop();
+  };
+
+  // capture frames from each video stream and draw them onto the canvas
+  // function drawFrame() {
+  //   canvasCtx.save();
+  //   canvasEl.setAttribute('width', `${streamMaxWidth}px`);
+  //   canvasEl.setAttribute('height', `${streamMaxHeight}px`);
+  //   canvasCtx.drawImage(screenShareVIdeoEl, 0, 0, streamMaxWidth, streamMaxHeight);
+  //   canvasCtx.drawImage(cameraStreamVideoEl, 10, 10, 8, 8);
+
+  //   // convert the canvas to a blob and create a new video track
+  //   canvasEl.toBlob((blob) => {
+  //     const newTrack = new MediaStreamTrack();
+
+  //     newTrack.enabled = true;
+
+  //     // add the new track to the merged stream
+  //     videoTracks.push(newTrack);
+  //     mergedStream.addTrack(newTrack);
+
+  //     // call drawFrame again to capture the next frame
+  //     requestAnimationFrame(drawFrame);
+  //   }, 'video/webm');
+  // }
+
+  const createCameraPopup = ({ videoSrc }: { videoSrc: MediaStream }) => {
+    // video container to show live video stream from camera
+
+    cameraStreamVideoEl = document.createElement('video');
+    cameraStreamVideoEl.style.display = 'hidden';
+    cameraStreamVideoEl.srcObject = videoSrc;
+    cameraStreamVideoEl.muted = true;
+    cameraStreamVideoEl.playsInline = true;
+    cameraStreamVideoEl.onloadedmetadata = async () => {
+      await cameraStreamVideoEl.play();
+      document.body.appendChild(cameraStreamVideoEl);
+      if (document.pictureInPictureEnabled) {
+        await cameraStreamVideoEl.requestPictureInPicture();
+      } else {
+        throw new Error('Error: PIP mode disabled');
+      }
+    };
+  };
+
   overlay = document.createElement('div');
   //overlay styles
   overlay.style.width = '100vw';
@@ -172,8 +181,6 @@ const openRecorder = () => {
     overlay.removeChild(box);
     document.body.removeChild(overlay);
 
-    const videoChunks: Blob[] = [];
-
     // get access to user's camera and microphone
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
@@ -183,7 +190,7 @@ const openRecorder = () => {
     }
 
     // getting screen capture streams
-    const screenStream = await startScreenCapture({ 
+    screenStream = await startScreenCapture({
       audio: true,
       video: {
         //@ts-ignore
@@ -196,11 +203,18 @@ const openRecorder = () => {
     });
 
     // getting screen capture streams
-    const cameraStream = await startCameraCapture({
+    cameraStream = await startCameraCapture({
       audio: true,
       video: true,
-      // video: { width: 1280, height: 720 },
     });
+
+    screenShareVideoEl = document.createElement('video');
+    screenShareVideoEl.srcObject = new MediaStream(screenStream.getTracks());
+    screenShareVideoEl.muted = true;
+    screenShareVideoEl.playsInline = true;
+    screenShareVideoEl.onloadedmetadata = async () => {
+      await screenShareVideoEl.play();
+    };
 
     if (!screenStream) {
       throw new Error('Not able to capture screen.');
@@ -210,29 +224,45 @@ const openRecorder = () => {
       throw new Error('Not able to capture camera & microphone.');
     }
 
-    // showing live self camera feed popup
     createCameraPopup({ videoSrc: new MediaStream(cameraStream.getTracks()) });
 
-    // merging screen, camera and audio tracks in one
-    const mergedStream = new MediaStream();
+    // combineStreamToCanvas();
 
-    screenStream.getTracks().forEach((tracks) => mergedStream.addTrack(tracks));
-    cameraStream.getTracks().forEach((tracks) => mergedStream.addTrack(tracks));
+    // const mergedStream = canvasEl.captureStream();
 
-    console.log('🚀 ~ file: background.ts:155 ~ box.addEventListener ~ mergedStream:', mergedStream);
+    // showing live self camera feed popup
+
+    //********************************** */
+
+    // const testVideoMergeStreamEl = document.createElement('video');
+    // testVideoMergeStreamEl.srcObject = mergedStream;
+    // testVideoMergeStreamEl.style.height = '30em';
+    // testVideoMergeStreamEl.style.width = '30em';
+    // testVideoMergeStreamEl.style.position = 'fixed';
+    // testVideoMergeStreamEl.style.top = '20%';
+    // testVideoMergeStreamEl.style.left = '50%';
+    // testVideoMergeStreamEl.muted = true;
+    // testVideoMergeStreamEl.playsInline = true;
+    // testVideoMergeStreamEl.onloadedmetadata = async () => {
+    //   await testVideoMergeStreamEl.play();
+    // };
+
+    // document.body.appendChild(testVideoMergeStreamEl);
+
+    //********************************** */
 
     // getting the video for all merged tracks
-    const mediaRecorder = new MediaRecorder(mergedStream, { mimeType: 'video/webm' });
+    mediaRecorder = new MediaRecorder(screenStream, {
+      mimeType: 'video/webm',
+    });
+
     mediaRecorder.ondataavailable = (ev) => {
       console.log('🚀 ~ file: background.ts:159 ~ box.addEventListener ~ on-data-available:', ev.data);
 
       videoChunks.push(ev.data);
     };
-    mediaRecorder.start();
 
-    const screenMediaRecorder = new MediaRecorder(screenStream);
-
-    screenMediaRecorder.onstop = async (ev) => {
+    mediaRecorder.onstop = async (ev) => {
       console.log('media-recorder event', ev);
       console.log('Video chunks', videoChunks);
 
@@ -251,6 +281,7 @@ const openRecorder = () => {
 
       window.open(frontendURL, '_blank');
     };
+    mediaRecorder.start();
   });
 };
 
