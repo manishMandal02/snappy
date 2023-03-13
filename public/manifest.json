@@ -7,7 +7,7 @@
   "action": {
     "default_icon": "images/video-recorder-icon.jpg"
   },
-  "permissions": ["activeTab", "scripting", "storage"],
+  "permissions": ["activeTab", "desktopCapture", "scripting", "storage", "unlimitedStorage"],
   "background": {
     "service_worker": "background.js"
   }
